@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Nơi lưu giữ những trích dẫn từ sách bạn đọc." />
+    <title>Margelle</title>
+    <script>
+      // Apply the saved theme before first paint (see src/hooks/use-theme.ts).
+      ;(function () {
+        var saved = localStorage.getItem('margelle.theme')
+        var dark = saved
+          ? saved === 'dark'
+          : matchMedia('(prefers-color-scheme: dark)').matches
+        document.documentElement.classList.toggle('dark', dark)
+      })()
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
