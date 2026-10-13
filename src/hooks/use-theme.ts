@@ -1,15 +1,22 @@
 import { useSyncExternalStore } from 'react'
 
 export type Theme = 'light' | 'dark'
+// 'system' follows the device setting and is the default.
+export type ThemePreference = Theme | 'system'
 
 // Keep the key in sync with the inline script in index.html.
 const STORAGE_KEY = 'margelle.theme'
 const systemDark = window.matchMedia('(prefers-color-scheme: dark)')
 const listeners = new Set<() => void>()
 
-function currentTheme(): Theme {
+function currentPreference(): ThemePreference {
   const saved = localStorage.getItem(STORAGE_KEY)
-  if (saved === 'light' || saved === 'dark') return saved
+  return saved === 'light' || saved === 'dark' ? saved : 'system'
+}
+
+function currentTheme(): Theme {
+  const preference = currentPreference()
+  if (preference !== 'system') return preference
   return systemDark.matches ? 'dark' : 'light'
 }
 
@@ -28,11 +35,18 @@ function subscribe(listener: () => void) {
   }
 }
 
-export function setTheme(theme: Theme) {
-  localStorage.setItem(STORAGE_KEY, theme)
+export function setThemePreference(preference: ThemePreference) {
+  if (preference === 'system') localStorage.removeItem(STORAGE_KEY)
+  else localStorage.setItem(STORAGE_KEY, preference)
   apply()
 }
 
+// The theme actually shown.
 export function useTheme(): Theme {
   return useSyncExternalStore(subscribe, currentTheme)
+}
+
+// What the person chose: light, dark, or follow the system.
+export function useThemePreference(): ThemePreference {
+  return useSyncExternalStore(subscribe, currentPreference)
 }

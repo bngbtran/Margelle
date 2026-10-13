@@ -12,16 +12,12 @@ export function fold(value: string): string {
 
 export function buildIndex(quotes: Quote[]): MiniSearch<Quote> {
   const index = new MiniSearch<Quote>({
-    fields: ['text', 'book', 'author', 'tags', 'note'],
-    extractField: (quote, field) => {
-      const value = quote[field as keyof Quote]
-      return Array.isArray(value) ? value.join(' ') : String(value ?? '')
-    },
+    fields: ['text', 'book', 'author', 'contributorName'],
     processTerm: (term) => fold(term),
     searchOptions: {
       prefix: true,
       combineWith: 'AND',
-      boost: { book: 2, author: 2, tags: 2 },
+      boost: { book: 2, author: 2 },
     },
   })
   index.addAll(quotes)

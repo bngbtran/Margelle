@@ -2,9 +2,63 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Each signed-in user can only read and write their own quotes.
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // The library belongs to the first account that signed in.
+    function isOwner() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/config/library)
+        && get(/databases/$(database)/documents/config/library).data.ownerUid == request.auth.uid;
+    }
+
+    // Everyone else must be invited by e-mail.
+    function isInvited() {
+      return signedIn()
+        && request.auth.token.email_verified == true
+        && exists(/databases/$(database)/documents/members/$(request.auth.token.email));
+    }
+
+    function isMember() {
+      return isOwner() || isInvited();
+    }
+
+    match /config/library {
+      allow read: if signedIn();
+      // `create` only applies while the document does not exist yet.
+      allow create: if signedIn() && request.resource.data.ownerUid == request.auth.uid;
+    }
+
+    match /members/{email} {
+      allow read: if isOwner() || (signedIn() && request.auth.token.email == email);
+      allow write: if isOwner();
+    }
+
+    match /playlists/{playlistId} {
+      allow read: if isMember();
+      allow create: if isMember() && request.resource.data.ownerUid == request.auth.uid;
+      allow update: if isMember()
+        && (isOwner() || resource.data.ownerUid == request.auth.uid)
+        && request.resource.data.ownerUid == resource.data.ownerUid;
+      allow delete: if isMember()
+        && (isOwner() || resource.data.ownerUid == request.auth.uid);
+    }
+
+    match /quotes/{quoteId} {
+      allow read: if isMember();
+      allow create: if isMember() && request.resource.data.contributorUid == request.auth.uid;
+      // The contributor shown on the page can never be rewritten.
+      allow update: if isMember()
+        && (isOwner() || resource.data.contributorUid == request.auth.uid)
+        && request.resource.data.contributorUid == resource.data.contributorUid;
+      allow delete: if isMember()
+        && (isOwner() || resource.data.contributorUid == request.auth.uid);
+    }
+
+    // Quotes saved before playlists existed; kept so they can be migrated.
     match /users/{uid}/quotes/{quoteId} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+      allow read, write: if signedIn() && request.auth.uid == uid;
     }
   }
 }

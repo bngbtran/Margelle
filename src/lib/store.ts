@@ -1,95 +1,313 @@
 import {
-  addDoc,
   collection,
   deleteDoc,
   doc,
+  getDocs,
   onSnapshot,
-  orderBy,
-  query,
+  setDoc,
   updateDoc,
+  writeBatch,
 } from 'firebase/firestore'
 import { db } from './firebase'
-import type { Quote, QuoteInput } from './types'
+import type {
+  Playlist,
+  PlaylistInput,
+  Quote,
+  QuoteInput,
+  Viewer,
+} from './types'
 
-export interface QuoteStore {
-  subscribe(
-    onQuotes: (quotes: Quote[]) => void,
-    onError: (error: Error) => void,
-  ): () => void
-  add(input: QuoteInput): Promise<void>
-  update(id: string, patch: Partial<QuoteInput>): Promise<void>
-  remove(id: string): Promise<void>
+// `id` is known immediately; `saved` settles once the write is confirmed.
+export interface Created {
+  id: string
+  saved: Promise<void>
 }
 
-export function firestoreStore(uid: string): QuoteStore {
+export interface LibraryStore {
+  subscribePlaylists(
+    onData: (playlists: Playlist[]) => void,
+    onError: (error: Error) => void,
+  ): () => void
+  subscribeQuotes(
+    onData: (quotes: Quote[]) => void,
+    onError: (error: Error) => void,
+  ): () => void
+  addPlaylist(input: PlaylistInput): Created
+  updatePlaylist(id: string, patch: Partial<PlaylistInput>): Promise<void>
+  // `quotes` are the quotes currently printed in that playlist.
+  removePlaylist(id: string, quotes: Quote[]): Promise<void>
+  addQuote(input: QuoteInput): Created
+  updateQuote(id: string, patch: Partial<QuoteInput>): Promise<void>
+  removeQuote(id: string): Promise<void>
+}
+
+// Firestore allows 500 writes per batch.
+const BATCH_SIZE = 400
+
+type Stored = Record<string, unknown>
+
+// Quotes written before multi-playlist support hold a single `playlistId`.
+function toQuote(data: Stored, id: string): Quote {
+  const playlistIds = Array.isArray(data.playlistIds)
+    ? (data.playlistIds as string[])
+    : typeof data.playlistId === 'string'
+      ? [data.playlistId]
+      : []
+  return {
+    id,
+    playlistIds,
+    text: String(data.text ?? ''),
+    book: String(data.book ?? ''),
+    author: String(data.author ?? ''),
+    contributorUid: String(data.contributorUid ?? ''),
+    contributorName: String(data.contributorName ?? ''),
+    createdAt: Number(data.createdAt ?? 0),
+    updatedAt: Number(data.updatedAt ?? 0),
+  }
+}
+
+function toPlaylist(data: Stored, id: string): Playlist {
+  return {
+    id,
+    title: String(data.title ?? ''),
+    author: String(data.author ?? ''),
+    description: String(data.description ?? ''),
+    color: String(data.color ?? ''),
+    ownerUid: String(data.ownerUid ?? ''),
+    ownerName: String(data.ownerName ?? ''),
+    createdAt: Number(data.createdAt ?? 0),
+    updatedAt: Number(data.updatedAt ?? 0),
+  }
+}
+
+function canEdit(viewer: Viewer, quote: Quote) {
+  return viewer.role === 'owner' || quote.contributorUid === viewer.uid
+}
+
+export function firestoreStore(viewer: Viewer): LibraryStore {
   if (!db) throw new Error('Firebase is not configured')
-  const quotes = collection(db, 'users', uid, 'quotes')
+  const firestore = db
+  const playlists = collection(firestore, 'playlists')
+  const quotes = collection(firestore, 'quotes')
 
   return {
-    subscribe(onQuotes, onError) {
+    subscribePlaylists(onData, onError) {
       return onSnapshot(
-        query(quotes, orderBy('createdAt', 'desc')),
+        playlists,
         (snapshot) =>
-          onQuotes(
-            snapshot.docs.map((d) => ({ ...d.data(), id: d.id }) as Quote),
-          ),
+          onData(snapshot.docs.map((d) => toPlaylist(d.data(), d.id))),
         onError,
       )
     },
-    async add(input) {
-      const now = Date.now()
-      await addDoc(quotes, { ...input, createdAt: now, updatedAt: now })
+    subscribeQuotes(onData, onError) {
+      return onSnapshot(
+        quotes,
+        (snapshot) => onData(snapshot.docs.map((d) => toQuote(d.data(), d.id))),
+        onError,
+      )
     },
-    async update(id, patch) {
+    addPlaylist(input) {
+      const ref = doc(playlists)
+      const now = Date.now()
+      const saved = setDoc(ref, {
+        ...input,
+        ownerUid: viewer.uid,
+        ownerName: viewer.name,
+        createdAt: now,
+        updatedAt: now,
+      })
+      return { id: ref.id, saved }
+    },
+    async updatePlaylist(id, patch) {
+      await updateDoc(doc(playlists, id), { ...patch, updatedAt: Date.now() })
+    },
+    async removePlaylist(id, inPlaylist) {
+      // Quotes that also live in another book stay there; quotes the viewer
+      // may not touch are left alone and simply stop being shown.
+      const editable = inPlaylist.filter((quote) => canEdit(viewer, quote))
+      for (let i = 0; i < editable.length; i += BATCH_SIZE) {
+        const batch = writeBatch(firestore)
+        for (const quote of editable.slice(i, i + BATCH_SIZE)) {
+          const remaining = quote.playlistIds.filter((other) => other !== id)
+          if (remaining.length > 0) {
+            batch.update(doc(quotes, quote.id), { playlistIds: remaining })
+          } else {
+            batch.delete(doc(quotes, quote.id))
+          }
+        }
+        await batch.commit()
+      }
+      await deleteDoc(doc(playlists, id))
+    },
+    addQuote(input) {
+      const ref = doc(quotes)
+      const now = Date.now()
+      const saved = setDoc(ref, {
+        ...input,
+        contributorUid: viewer.uid,
+        contributorName: viewer.name,
+        createdAt: now,
+        updatedAt: now,
+      })
+      return { id: ref.id, saved }
+    },
+    async updateQuote(id, patch) {
       await updateDoc(doc(quotes, id), { ...patch, updatedAt: Date.now() })
     },
-    async remove(id) {
+    async removeQuote(id) {
       await deleteDoc(doc(quotes, id))
     },
   }
 }
 
-const LOCAL_KEY = 'margelle.quotes'
+const MIGRATED_KEY = 'margelle.migrated.'
 
-function readLocal(): Quote[] {
-  try {
-    return JSON.parse(localStorage.getItem(LOCAL_KEY) ?? '[]') as Quote[]
-  } catch {
-    return []
-  }
-}
-
-const localListeners = new Set<(quotes: Quote[]) => void>()
-
-function writeLocal(quotes: Quote[]) {
-  localStorage.setItem(LOCAL_KEY, JSON.stringify(quotes))
-  for (const listener of localListeners) listener(quotes)
-}
-
-// Used when no Firebase config is present: quotes stay in this browser only.
-export const localStore: QuoteStore = {
-  subscribe(onQuotes) {
-    localListeners.add(onQuotes)
-    onQuotes(readLocal())
-    return () => {
-      localListeners.delete(onQuotes)
-    }
-  },
-  async add(input) {
+// Before playlists existed, quotes lived privately under users/{uid}/quotes.
+// Move any that are left into one playlist so they show up on the shelf.
+export async function migrateLegacyQuotes(viewer: Viewer): Promise<void> {
+  if (!db || localStorage.getItem(MIGRATED_KEY + viewer.uid)) return
+  const legacy = await getDocs(collection(db, 'users', viewer.uid, 'quotes'))
+  if (!legacy.empty) {
     const now = Date.now()
-    writeLocal([
-      { ...input, id: crypto.randomUUID(), createdAt: now, updatedAt: now },
-      ...readLocal(),
-    ])
-  },
-  async update(id, patch) {
-    writeLocal(
-      readLocal().map((q) =>
-        q.id === id ? { ...q, ...patch, updatedAt: Date.now() } : q,
-      ),
-    )
-  },
-  async remove(id) {
-    writeLocal(readLocal().filter((q) => q.id !== id))
-  },
+    const playlist = doc(collection(db, 'playlists'))
+    await setDoc(playlist, {
+      title: 'Trích dẫn đầu tiên',
+      author: '',
+      description: '',
+      color: '#a9522d',
+      ownerUid: viewer.uid,
+      ownerName: viewer.name,
+      createdAt: now,
+      updatedAt: now,
+    })
+    for (let i = 0; i < legacy.docs.length; i += BATCH_SIZE / 2) {
+      const batch = writeBatch(db)
+      for (const old of legacy.docs.slice(i, i + BATCH_SIZE / 2)) {
+        const data = old.data()
+        batch.set(doc(db, 'quotes', old.id), {
+          playlistIds: [playlist.id],
+          text: String(data.text ?? ''),
+          book: String(data.book ?? ''),
+          author: String(data.author ?? ''),
+          contributorUid: viewer.uid,
+          contributorName: viewer.name,
+          createdAt: Number(data.createdAt ?? now),
+          updatedAt: now,
+        })
+        batch.delete(old.ref)
+      }
+      await batch.commit()
+    }
+  }
+  localStorage.setItem(MIGRATED_KEY + viewer.uid, '1')
+}
+
+const LOCAL_PLAYLISTS = 'margelle.local.playlists'
+const LOCAL_QUOTES = 'margelle.local.quotes'
+
+function createLocalTable<T extends { id: string }>(
+  key: string,
+  parse: (row: Stored) => T,
+) {
+  const listeners = new Set<(rows: T[]) => void>()
+  function read(): T[] {
+    try {
+      const rows = JSON.parse(localStorage.getItem(key) ?? '[]') as Stored[]
+      return rows.map(parse)
+    } catch {
+      return []
+    }
+  }
+  function write(rows: T[]) {
+    localStorage.setItem(key, JSON.stringify(rows))
+    for (const listener of listeners) listener(rows)
+  }
+  function subscribe(onData: (rows: T[]) => void) {
+    listeners.add(onData)
+    onData(read())
+    return () => {
+      listeners.delete(onData)
+    }
+  }
+  return { read, write, subscribe }
+}
+
+const localPlaylists = createLocalTable<Playlist>(LOCAL_PLAYLISTS, (row) =>
+  toPlaylist(row, String(row.id)),
+)
+const localQuotes = createLocalTable<Quote>(LOCAL_QUOTES, (row) =>
+  toQuote(row, String(row.id)),
+)
+
+// Used when no Firebase config is present: everything stays in this browser.
+export function localStore(viewer: Viewer): LibraryStore {
+  return {
+    subscribePlaylists: (onData) => localPlaylists.subscribe(onData),
+    subscribeQuotes: (onData) => localQuotes.subscribe(onData),
+    addPlaylist(input) {
+      const id = crypto.randomUUID()
+      const now = Date.now()
+      localPlaylists.write([
+        ...localPlaylists.read(),
+        {
+          ...input,
+          id,
+          ownerUid: viewer.uid,
+          ownerName: viewer.name,
+          createdAt: now,
+          updatedAt: now,
+        },
+      ])
+      return { id, saved: Promise.resolve() }
+    },
+    async updatePlaylist(id, patch) {
+      localPlaylists.write(
+        localPlaylists
+          .read()
+          .map((p) =>
+            p.id === id ? { ...p, ...patch, updatedAt: Date.now() } : p,
+          ),
+      )
+    },
+    async removePlaylist(id) {
+      localQuotes.write(
+        localQuotes
+          .read()
+          .map((q) => ({
+            ...q,
+            playlistIds: q.playlistIds.filter((other) => other !== id),
+          }))
+          .filter((q) => q.playlistIds.length > 0),
+      )
+      localPlaylists.write(localPlaylists.read().filter((p) => p.id !== id))
+    },
+    addQuote(input) {
+      const id = crypto.randomUUID()
+      const now = Date.now()
+      localQuotes.write([
+        ...localQuotes.read(),
+        {
+          ...input,
+          id,
+          contributorUid: viewer.uid,
+          contributorName: viewer.name,
+          createdAt: now,
+          updatedAt: now,
+        },
+      ])
+      return { id, saved: Promise.resolve() }
+    },
+    async updateQuote(id, patch) {
+      localQuotes.write(
+        localQuotes
+          .read()
+          .map((q) =>
+            q.id === id ? { ...q, ...patch, updatedAt: Date.now() } : q,
+          ),
+      )
+    },
+    async removeQuote(id) {
+      localQuotes.write(localQuotes.read().filter((q) => q.id !== id))
+    },
+  }
 }

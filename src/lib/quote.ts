@@ -1,12 +1,10 @@
-import type { Quote } from './types'
+import type { Playlist, Quote } from './types'
 
 // Firestore caps a document at 1 MiB; leave headroom for the other fields.
 export const MAX_TEXT_BYTES = 900_000
 
-export function sourceOf(quote: Pick<Quote, 'book' | 'author' | 'page'>) {
-  const source = [quote.book, quote.author].filter(Boolean).join(' — ')
-  if (!quote.page) return source
-  return source ? `${source} · tr. ${quote.page}` : `tr. ${quote.page}`
+export function sourceOf(quote: Pick<Quote, 'book' | 'author'>) {
+  return [quote.book, quote.author].filter(Boolean).join(' — ')
 }
 
 export function toClipboardText(quote: Quote) {
@@ -14,16 +12,8 @@ export function toClipboardText(quote: Quote) {
   return source ? `“${quote.text}”\n— ${source}` : quote.text
 }
 
-export function parseTags(value: string): string[] {
-  const tags = value
-    .split(',')
-    .map((tag) => tag.trim().replace(/^#/, '').toLowerCase())
-    .filter(Boolean)
-  return [...new Set(tags)]
-}
-
-export function downloadJson(quotes: Quote[]) {
-  const blob = new Blob([JSON.stringify(quotes, null, 2)], {
+export function downloadJson(playlists: Playlist[], quotes: Quote[]) {
+  const blob = new Blob([JSON.stringify({ playlists, quotes }, null, 2)], {
     type: 'application/json',
   })
   const link = document.createElement('a')

@@ -11,40 +11,63 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { MAX_TEXT_BYTES, parseTags } from '@/lib/quote'
-import type { Quote, QuoteInput } from '@/lib/types'
+import { coverStyle } from '@/lib/cover'
+import { MAX_TEXT_BYTES } from '@/lib/quote'
+import type { Playlist, Quote, QuoteInput } from '@/lib/types'
 
 interface QuoteFormProps {
   // null when adding a new quote.
   quote: Quote | null
+  playlists: Playlist[]
+  // Ticked by default for a new quote: the book it is being added from.
+  defaultPlaylistId: string | null
   // Known book → author pairs, used for suggestions.
   books: Map<string, string>
   onSubmit: (input: QuoteInput) => void
   onClose: () => void
 }
 
-export function QuoteForm({ quote, books, onSubmit, onClose }: QuoteFormProps) {
+export function QuoteForm({
+  quote,
+  playlists,
+  defaultPlaylistId,
+  books,
+  onSubmit,
+  onClose,
+}: QuoteFormProps) {
+  const [playlistIds, setPlaylistIds] = useState<string[]>(
+    quote?.playlistIds ?? (defaultPlaylistId ? [defaultPlaylistId] : []),
+  )
   const [text, setText] = useState(quote?.text ?? '')
   const [book, setBook] = useState(quote?.book ?? '')
   const [author, setAuthor] = useState(quote?.author ?? '')
-  const [page, setPage] = useState(quote?.page ?? '')
-  const [tags, setTags] = useState(quote?.tags.join(', ') ?? '')
-  const [note, setNote] = useState(quote?.note ?? '')
 
+  // The book the form was opened from is listed first.
+  const options = [...playlists].sort(
+    (a, b) =>
+      Number(b.id === defaultPlaylistId) - Number(a.id === defaultPlaylistId),
+  )
+  // Ids of playlists that no longer exist are dropped on save.
+  const chosen = playlists.filter((p) => playlistIds.includes(p.id))
   const tooLong = new Blob([text]).size > MAX_TEXT_BYTES
-  const canSubmit = text.trim().length > 0 && !tooLong
+  const canSubmit = text.trim().length > 0 && !tooLong && chosen.length > 0
+
+  function togglePlaylist(id: string) {
+    setPlaylistIds((current) =>
+      current.includes(id)
+        ? current.filter((other) => other !== id)
+        : [...current, id],
+    )
+  }
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault()
     if (!canSubmit) return
     onSubmit({
+      playlistIds: chosen.map((p) => p.id),
       text: text.trim(),
       book: book.trim(),
       author: author.trim(),
-      page: page.trim(),
-      tags: parseTags(tags),
-      note: note.trim(),
-      favorite: quote?.favorite ?? false,
     })
   }
 
@@ -61,7 +84,8 @@ export function QuoteForm({ quote, books, onSubmit, onClose }: QuoteFormProps) {
             {quote ? 'Sửa trích dẫn' : 'Thêm trích dẫn'}
           </DialogTitle>
           <DialogDescription>
-            Chỉ cần nội dung là đủ, các ô còn lại có thể để trống.
+            Mỗi trích dẫn bắt đầu ở một trang mới; đoạn dài sẽ tự tràn sang
+            trang kế.
           </DialogDescription>
         </DialogHeader>
 
@@ -75,7 +99,7 @@ export function QuoteForm({ quote, books, onSubmit, onClose }: QuoteFormProps) {
               placeholder="Dán hoặc gõ đoạn trích…"
               autoFocus
               aria-invalid={tooLong}
-              className="max-h-[42vh] min-h-36 font-serif text-base leading-relaxed md:text-base"
+              className="max-h-[38vh] min-h-36 font-serif text-base leading-relaxed md:text-base"
             />
             {tooLong && (
               <p className="text-sm text-destructive">
@@ -87,7 +111,7 @@ export function QuoteForm({ quote, books, onSubmit, onClose }: QuoteFormProps) {
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="grid gap-2">
-              <Label htmlFor="quote-book">Sách</Label>
+              <Label htmlFor="quote-book">Sách gốc</Label>
               <Input
                 id="quote-book"
                 value={book}
@@ -119,38 +143,40 @@ export function QuoteForm({ quote, books, onSubmit, onClose }: QuoteFormProps) {
             </div>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-[7rem_1fr]">
-            <div className="grid gap-2">
-              <Label htmlFor="quote-page">Trang</Label>
-              <Input
-                id="quote-page"
-                value={page}
-                onChange={(e) => setPage(e.target.value)}
-                autoComplete="off"
-              />
+          <fieldset className="grid gap-2">
+            <legend className="mb-2 text-sm leading-none font-medium">
+              Playlist
+              <span className="ml-2 font-normal text-muted-foreground">
+                chọn một hoặc nhiều cuốn
+              </span>
+            </legend>
+            <div className="grid max-h-40 gap-0.5 overflow-y-auto rounded-lg border border-input p-1 sm:grid-cols-2">
+              {options.map((playlist) => (
+                <label
+                  key={playlist.id}
+                  className="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
+                >
+                  <input
+                    type="checkbox"
+                    checked={playlistIds.includes(playlist.id)}
+                    onChange={() => togglePlaylist(playlist.id)}
+                    className="size-4 shrink-0 cursor-pointer rounded-[3px] accent-(--brand)"
+                  />
+                  <span
+                    aria-hidden
+                    style={coverStyle(playlist.color)}
+                    className="h-4 w-3 shrink-0 rounded-[1px_2px_2px_1px] bg-(--cover)"
+                  />
+                  <span className="truncate">{playlist.title}</span>
+                </label>
+              ))}
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="quote-tags">Thẻ</Label>
-              <Input
-                id="quote-tags"
-                value={tags}
-                onChange={(e) => setTags(e.target.value)}
-                placeholder="cách nhau bằng dấu phẩy"
-                autoComplete="off"
-              />
-            </div>
-          </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor="quote-note">Ghi chú</Label>
-            <Textarea
-              id="quote-note"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="Vì sao bạn muốn giữ lại đoạn này?"
-              className="max-h-40"
-            />
-          </div>
+            {chosen.length === 0 && (
+              <p className="text-sm text-muted-foreground">
+                Hãy chọn ít nhất một playlist.
+              </p>
+            )}
+          </fieldset>
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>
