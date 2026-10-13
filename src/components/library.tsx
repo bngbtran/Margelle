@@ -353,7 +353,7 @@ export function Library({ viewer, local, onSignOut }: LibraryProps) {
             )}
 
             {loading ? (
-              <p className="py-24 text-center font-serif text-muted-foreground italic">
+              <p className="py-24 text-center text-muted-foreground">
                 Đang mở tủ sách…
               </p>
             ) : query ? (
@@ -404,7 +404,7 @@ export function Library({ viewer, local, onSignOut }: LibraryProps) {
                   onCreate={() => setPlaylistForm('new')}
                 />
                 {playlists.length === 0 && (
-                  <p className="mt-6 text-center font-serif text-muted-foreground italic">
+                  <p className="mt-6 text-center text-muted-foreground">
                     Kệ sách còn trống. Hãy tạo playlist đầu tiên để bắt đầu lưu
                     trích dẫn.
                   </p>

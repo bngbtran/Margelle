@@ -9,6 +9,24 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * Typography: two typefaces, each with one job.
+ *
+ * Lora (font-serif) is for what people read:
+ *   - everything printed on or in a book: cover, title page, running head,
+ *     quotes, attributions, page numbers, colophon
+ *   - quote text wherever else it appears (search results, the quote form)
+ *   - headings: the app name and its tagline, screen titles, dialog titles
+ *
+ * Be Vietnam Pro (font-sans, the default) is for what people operate:
+ *   buttons, form fields, labels, menus, captions, counts, hints, status and
+ *   error messages.
+ *
+ * Italic is reserved for secondary text inside a book: the source book of a
+ * quote, the epigraph, the colophon, and notices printed on a page. Names of
+ * people are always upright.
+ */
+
 @theme inline {
     --font-heading: var(--font-serif);
     --font-sans: 'Be Vietnam Pro', ui-sans-serif, system-ui, sans-serif;
@@ -202,7 +220,6 @@
 .cover-author {
     font-family: var(--font-serif);
     font-size: 0.85em;
-    font-style: italic;
     line-height: 1.3;
     opacity: 0.85;
     max-width: 100%;
@@ -215,36 +232,90 @@
 
 /* ---------- Shelf ---------- */
 
+/*
+ * A wooden bookcase. Each grid row is one compartment: a back panel in the
+ * shadow of the board above, the top surface of its own board, and that
+ * board's front edge, which carries a paper label under every book.
+ */
 .shelf {
     --bw: 150px;
     --bh: calc(var(--bw) * 1.42);
-    --shelf-top: 44px;
-    --plank: 18px;
-    --caption: 58px;
-    --row: calc(var(--shelf-top) + var(--bh) + var(--plank) + var(--caption));
+    --shelf-top: 46px;
+    /* Depth of the board's top surface as seen from slightly above. */
+    --board-top: 16px;
+    /* Height of the board's front edge. */
+    --board-edge: 58px;
+    --floor: calc(var(--shelf-top) + var(--bh));
+    --row: calc(var(--floor) + var(--board-edge));
+
+    --wood-back: oklch(0.47 0.055 58);
+    --wood-top-far: oklch(0.5 0.065 60);
+    --wood-top-near: oklch(0.7 0.085 68);
+    --wood-highlight: oklch(0.8 0.08 72);
+    --wood-edge: oklch(0.63 0.085 64);
+    --wood-edge-low: oklch(0.52 0.08 58);
+    --wood-under: oklch(0.33 0.05 52);
+
+    position: relative;
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(calc(var(--bw) + 46px), 1fr));
     grid-auto-rows: var(--row);
-    padding: 0 12px;
-    border-radius: 14px;
-    /* One plank per row, drawn behind the books. */
+    padding: 0 10px;
+    border: solid var(--wood-edge);
+    border-width: 16px 16px 0;
+    border-radius: 8px 8px 4px 4px;
+    background-color: var(--wood-back);
     background-image: linear-gradient(
         to bottom,
-        transparent calc(var(--shelf-top) + var(--bh) - 26px),
-        rgb(0 0 0 / 0.1) calc(var(--shelf-top) + var(--bh)),
-        oklch(0.66 0.075 62) calc(var(--shelf-top) + var(--bh)),
-        oklch(0.57 0.075 58) calc(var(--shelf-top) + var(--bh) + 5px),
-        oklch(0.44 0.065 52) calc(var(--shelf-top) + var(--bh) + var(--plank)),
-        rgb(0 0 0 / 0.28) calc(var(--shelf-top) + var(--bh) + var(--plank)),
-        transparent calc(var(--shelf-top) + var(--bh) + var(--plank) + 16px)
+        rgb(0 0 0 / 0.5) 0,
+        rgb(0 0 0 / 0.16) 26px,
+        transparent 76px,
+        transparent calc(var(--floor) - var(--board-top)),
+        var(--wood-top-far) calc(var(--floor) - var(--board-top)),
+        var(--wood-top-near) var(--floor),
+        var(--wood-highlight) var(--floor),
+        var(--wood-highlight) calc(var(--floor) + 2px),
+        var(--wood-edge) calc(var(--floor) + 2px),
+        var(--wood-edge-low) calc(var(--row) - 3px),
+        var(--wood-under) calc(var(--row) - 3px),
+        var(--wood-under) var(--row)
     );
     background-size: 100% var(--row);
-    background-color: var(--wall);
+    /* The side panels throw a shadow inwards; the whole case stands off the page. */
+    box-shadow:
+        inset 12px 0 16px -8px rgb(0 0 0 / 0.55),
+        inset -12px 0 16px -8px rgb(0 0 0 / 0.55),
+        inset 0 1px 0 rgb(255 255 255 / 0.18),
+        0 24px 40px -22px rgb(0 0 0 / 0.55),
+        0 2px 6px rgb(0 0 0 / 0.2);
+}
+.dark .shelf {
+    --wood-back: oklch(0.3 0.04 55);
+    --wood-top-far: oklch(0.33 0.05 58);
+    --wood-top-near: oklch(0.5 0.07 64);
+    --wood-highlight: oklch(0.6 0.07 68);
+    --wood-edge: oklch(0.44 0.07 62);
+    --wood-edge-low: oklch(0.35 0.06 56);
+    --wood-under: oklch(0.2 0.03 50);
+}
+/* Wood grain: stretched noise laid over the whole case, under the books. */
+.shelf::before {
+    content: "";
+    position: absolute;
+    inset: -16px -16px 0;
+    border-radius: inherit;
+    pointer-events: none;
+    opacity: 0.5;
+    mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='240'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.006 0.22' numOctaves='4' seed='7'/%3E%3CfeColorMatrix values='0 0 0 0 0.35  0 0 0 0 0.22  0 0 0 0 0.12  0.9 0 0 0 -0.18'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+    background-size: 600px 240px;
 }
 @media (max-width: 520px) {
-    .shelf { --bw: 112px; --shelf-top: 34px; }
+    .shelf { --bw: 112px; --shelf-top: 36px; border-width: 10px 10px 0; padding: 0 4px; }
+    .shelf::before { inset: -10px -10px 0; }
 }
 .shelf-slot {
+    position: relative;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -253,22 +324,32 @@
     text-align: center;
     outline: none;
 }
+/* The caption is lettered straight onto the front edge of the board. */
 .shelf-caption {
-    margin-top: calc(var(--plank) + 12px);
-    padding: 0 6px;
-    font-size: 0.78rem;
-    line-height: 1.3;
-    color: var(--muted-foreground);
+    height: var(--board-edge);
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
-.shelf-caption b {
+.shelf-label {
     display: block;
+    max-width: calc(var(--bw) + 28px);
+    color: oklch(0.97 0.03 88);
+    text-shadow: 0 1px 2px rgb(0 0 0 / 0.55);
+    font-size: 0.7rem;
+    line-height: 1.2;
+}
+.shelf-label b {
+    display: block;
+    /* Room between the title and the count beneath it. */
+    margin-bottom: 5px;
+    font-size: 0.82rem;
     font-weight: 500;
-    color: var(--foreground);
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
-    max-width: calc(var(--bw) + 30px);
 }
+.shelf-label span { opacity: 0.78; }
 
 .book3d {
     position: relative;
@@ -308,7 +389,7 @@
     transform: translateZ(calc(var(--t) / -2));
     border-radius: 2px 4px 4px 2px;
     background: var(--cover);
-    box-shadow: -10px 4px 16px rgb(0 0 0 / 0.38);
+    box-shadow: -12px 3px 14px rgb(0 0 0 / 0.5);
 }
 .book-new {
     width: var(--bw);
@@ -318,16 +399,16 @@
     align-items: center;
     justify-content: center;
     gap: 8px;
-    border: 1.5px dashed color-mix(in oklch, var(--foreground), transparent 65%);
+    border: 1.5px dashed rgb(255 244 224 / 0.45);
     border-radius: 4px;
     font-size: 0.82rem;
-    color: var(--muted-foreground);
+    color: rgb(255 244 224 / 0.75);
     transition: color 0.2s, border-color 0.2s, transform 0.3s;
 }
 .shelf-slot:hover .book-new,
 .shelf-slot:focus-visible .book-new {
-    color: var(--foreground);
-    border-color: var(--brand);
+    color: rgb(255 244 224);
+    border-color: rgb(255 244 224 / 0.9);
     transform: translateY(-6px);
 }
 
@@ -455,7 +536,7 @@
     right: 0;
     display: flex;
     align-items: center;
-    font-family: var(--font-sans);
+    font-family: var(--font-serif);
     color: var(--page-muted);
 }
 .page-head {
@@ -469,7 +550,7 @@
 .page-foot { bottom: 0; font-size: 0.72em; }
 .face[data-side="right"] .page-foot { justify-content: flex-end; }
 .face[data-side="left"] .page-foot { justify-content: flex-start; }
-.page-number { font-family: var(--font-serif); font-size: 1.25em; color: var(--page-ink); font-variant-numeric: tabular-nums; }
+.page-number { font-size: 1.25em; color: var(--page-ink); font-variant-numeric: tabular-nums; }
 .page-body { position: absolute; overflow: hidden; }
 .page-body[data-single] { display: flex; flex-direction: column; justify-content: center; }
 

@@ -157,7 +157,7 @@ export function PlaylistForm({
                 autoComplete="off"
                 aria-label="Mã màu hex"
                 aria-invalid={!isHexColor(hexDraft)}
-                className="w-28 font-mono"
+                className="w-28 tabular-nums"
               />
               <span className="text-sm text-muted-foreground">
                 Màu tuỳ ý: bấm ô màu hoặc gõ mã hex

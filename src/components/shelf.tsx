@@ -56,8 +56,10 @@ export function Shelf({
               />
             </div>
             <span className="shelf-caption">
-              <b>{playlist.title}</b>
-              {count} trích dẫn
+              <span className="shelf-label">
+                <b>{playlist.title}</b>
+                <span>{count} trích dẫn</span>
+              </span>
             </span>
           </button>
         )
