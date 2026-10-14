@@ -63,11 +63,6 @@ export async function addMember(email: string) {
   })
 }
 
-export async function removeMember(email: string) {
-  if (!db) return
-  await deleteDoc(doc(db, 'members', email))
-}
-
 // Recorded on every visit so the owner can see who uses the shelf. Shares the
 // person's preferences document (users/{uid}).
 export async function recordProfile(viewer: Viewer) {

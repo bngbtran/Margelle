@@ -6,41 +6,86 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { addMember, removeMember, subscribeMembers } from '@/lib/access'
-import type { Member } from '@/lib/types'
+import { OWNER_EMAIL, addMember, subscribeMembers } from '@/lib/access'
 
-// Lets the owner decide which Google accounts may read and add to the shelf.
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+// Lets the owner invite Google accounts, one or several at a time. People
+// already invited are managed in "Quản lý người dùng", not here.
 export function MembersDialog({ onClose }: { onClose: () => void }) {
-  const [members, setMembers] = useState<Member[]>([])
-  const [email, setEmail] = useState('')
+  const [invited, setInvited] = useState<Set<string>>(new Set())
+  const [draft, setDraft] = useState('')
+  // Addresses queued up to be invited together.
+  const [queue, setQueue] = useState<string[]>([])
+  const [sending, setSending] = useState(false)
 
   useEffect(
     () =>
-      subscribeMembers(setMembers, (error) =>
-        toast.error('Không tải được danh sách', { description: error.message }),
+      subscribeMembers(
+        (members) => setInvited(new Set(members.map((m) => m.email))),
+        (error) =>
+          toast.error('Không tải được danh sách', {
+            description: error.message,
+          }),
       ),
     [],
   )
 
-  function handleAdd(event: FormEvent) {
-    event.preventDefault()
-    const value = email.trim().toLowerCase()
-    if (!value) return
-    addMember(value).catch((error: Error) =>
-      toast.error('Không mời được', { description: error.message }),
-    )
-    setEmail('')
+  // Returns the address if it can be queued, otherwise says why not.
+  function check(value: string): string | null {
+    const email = value.trim().toLowerCase()
+    if (!EMAIL.test(email)) {
+      toast.error('Email không hợp lệ', { description: value.trim() })
+    } else if (email === OWNER_EMAIL) {
+      toast.info('Đây là tài khoản chủ kệ sách')
+    } else if (invited.has(email)) {
+      toast.info('Người này đã được mời', { description: email })
+    } else {
+      return email
+    }
+    return null
   }
 
-  function handleRemove(member: Member) {
-    removeMember(member.email).catch((error: Error) =>
-      toast.error('Không gỡ được', { description: error.message }),
-    )
+  function handleAdd(event: FormEvent) {
+    event.preventDefault()
+    const email = check(draft)
+    if (!email) return
+    if (!queue.includes(email)) setQueue([...queue, email])
+    setDraft('')
   }
+
+  async function handleInvite() {
+    let emails = queue
+    // A typed address that was not added yet is invited too.
+    if (draft.trim()) {
+      const email = check(draft)
+      if (!email) return
+      if (!emails.includes(email)) emails = [...emails, email]
+    }
+    if (emails.length === 0) return
+    setSending(true)
+    try {
+      await Promise.all(emails.map((email) => addMember(email)))
+      toast.success(
+        emails.length === 1
+          ? `Đã mời ${emails[0]}`
+          : `Đã mời ${emails.length} người`,
+      )
+      setQueue([])
+      setDraft('')
+    } catch (error) {
+      toast.error('Không mời được', { description: (error as Error).message })
+    } finally {
+      setSending(false)
+    }
+  }
+
+  const total = queue.length + (draft.trim() ? 1 : 0)
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -48,48 +93,63 @@ export function MembersDialog({ onClose }: { onClose: () => void }) {
         <DialogHeader>
           <DialogTitle className="font-serif text-lg">Mời người dùng</DialogTitle>
           <DialogDescription>
-            Những tài khoản Google dưới đây được xem kệ sách và thêm trích dẫn.
-            Mỗi người chỉ sửa, xoá được phần mình thêm.
+            Nhập email Google của người bạn muốn mời. Có thể thêm nhiều người
+            rồi mời một lượt. Người đã được mời nằm trong Quản lý người dùng.
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleAdd} className="flex gap-2">
           <Input
             type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
             placeholder="ten@gmail.com"
             aria-label="Email người được mời"
             autoComplete="off"
-            required
           />
-          <Button type="submit">Mời</Button>
+          <Button type="submit" variant="outline" disabled={!draft.trim()}>
+            Thêm
+          </Button>
         </form>
 
-        {members.length === 0 ? (
-          <p className="py-2 text-sm text-muted-foreground">
-            Chưa mời ai. Hiện chỉ có bạn dùng kệ sách này.
-          </p>
-        ) : (
-          <ul className="grid gap-1">
-            {members.map((member) => (
-              <li
-                key={member.email}
-                className="flex items-center justify-between gap-2 rounded-lg px-2 py-1 hover:bg-muted"
-              >
-                <span className="truncate text-sm">{member.email}</span>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={`Gỡ ${member.email}`}
-                  onClick={() => handleRemove(member)}
+        {queue.length > 0 && (
+          <div>
+            <p className="mb-1 text-xs text-muted-foreground">
+              Chờ mời ({queue.length})
+            </p>
+            <ul className="grid gap-1">
+              {queue.map((email) => (
+                <li
+                  key={email}
+                  className="flex items-center justify-between gap-2 rounded-lg bg-muted/60 px-3 py-1.5"
                 >
-                  <X />
-                </Button>
-              </li>
-            ))}
-          </ul>
+                  <span className="truncate text-sm">{email}</span>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`Bỏ ${email}`}
+                    onClick={() => setQueue(queue.filter((e) => e !== email))}
+                  >
+                    <X />
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
+
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onClose}>
+            Đóng
+          </Button>
+          <Button
+            type="button"
+            disabled={total === 0 || sending}
+            onClick={handleInvite}
+          >
+            {sending ? 'Đang mời…' : total > 1 ? `Mời ${total} người` : 'Mời'}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   )
