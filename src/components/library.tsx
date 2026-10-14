@@ -1,5 +1,6 @@
 import {
   Download,
+  Info,
   LogOut,
   Monitor,
   Moon,
@@ -12,6 +13,7 @@ import {
 import { useCallback, useMemo, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { toast } from 'sonner'
+import { AboutDialog } from '@/components/about-dialog'
 import type { PageActions } from '@/components/book-pages'
 import { BookReader } from '@/components/book-reader'
 import { LogoMark } from '@/components/logo-mark'
@@ -94,6 +96,7 @@ export function Library({ viewer, local, onSignOut }: LibraryProps) {
     null,
   )
   const [membersOpen, setMembersOpen] = useState(false)
+  const [aboutOpen, setAboutOpen] = useState(false)
 
   const quoteById = useMemo(() => new Map(quotes.map((q) => [q.id, q])), [quotes])
   const playlistById = useMemo(
@@ -334,6 +337,9 @@ export function Library({ viewer, local, onSignOut }: LibraryProps) {
                     >
                       <Download /> Xuất tất cả ra JSON
                     </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setAboutOpen(true)}>
+                      <Info /> Về chúng tôi
+                    </DropdownMenuItem>
                     {!local && (
                       <DropdownMenuItem onSelect={onSignOut}>
                         <LogOut /> Đăng xuất
@@ -437,6 +443,8 @@ export function Library({ viewer, local, onSignOut }: LibraryProps) {
       )}
 
       {membersOpen && <MembersDialog onClose={() => setMembersOpen(false)} />}
+
+      {aboutOpen && <AboutDialog onClose={() => setAboutOpen(false)} />}
 
       <AlertDialog
         open={deletingQuote !== undefined}
