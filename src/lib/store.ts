@@ -80,8 +80,9 @@ function toPlaylist(data: Stored, id: string): Playlist {
   }
 }
 
+// A quote can only be changed or deleted by the person who contributed it.
 function canEdit(viewer: Viewer, quote: Quote) {
-  return viewer.role === 'owner' || quote.contributorUid === viewer.uid
+  return quote.contributorUid === viewer.uid
 }
 
 export function firestoreStore(viewer: Viewer): LibraryStore {
@@ -122,8 +123,8 @@ export function firestoreStore(viewer: Viewer): LibraryStore {
       await updateDoc(doc(playlists, id), { ...patch, updatedAt: Date.now() })
     },
     async removePlaylist(id, inPlaylist) {
-      // Quotes that also live in another book stay there; quotes the viewer
-      // may not touch are left alone and simply stop being shown.
+      // Quotes that also live in another book stay there. The caller only
+      // deletes a playlist once nobody else's quotes are left in it.
       const editable = inPlaylist.filter((quote) => canEdit(viewer, quote))
       for (let i = 0; i < editable.length; i += BATCH_SIZE) {
         const batch = writeBatch(firestore)

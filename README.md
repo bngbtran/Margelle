@@ -30,8 +30,9 @@ Khi chưa có cấu hình Firebase, app chạy ở **chế độ cục bộ**: d
 ## Ai được dùng kệ sách
 
 - **Chủ kệ sách** là tài khoản đầu tiên đăng nhập sau khi luật bảo mật được triển khai. Hãy tự đăng nhập ngay sau bước 6.
-- **Người đóng góp** là những tài khoản Google được chủ kệ sách mời bằng email (menu tài khoản → Người đóng góp). Họ xem được mọi cuốn sách, tạo playlist và thêm trích dẫn, nhưng chỉ sửa hoặc xoá phần mình thêm.
+- **Người đóng góp** là những tài khoản Google được chủ kệ sách mời bằng email (menu tài khoản → Người đóng góp). Họ xem được mọi cuốn sách, tạo playlist và thêm trích dẫn.
 - Tài khoản chưa được mời sẽ không đọc được gì.
+- Playlist và trích dẫn của ai thì chỉ người đó sửa hoặc xoá được, kể cả chủ kệ sách cũng không đụng được vào phần của người khác. Một playlist chỉ xoá được khi không còn trích dẫn của người khác bên trong.
 
 Toàn bộ quy tắc này nằm trong [firestore.rules](firestore.rules).
 

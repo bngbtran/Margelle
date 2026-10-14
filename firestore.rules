@@ -38,22 +38,23 @@ service cloud.firestore {
     match /playlists/{playlistId} {
       allow read: if isMember();
       allow create: if isMember() && request.resource.data.ownerUid == request.auth.uid;
+      // Only the person who made a playlist may change or delete it; not even
+      // the library owner can touch someone else's.
       allow update: if isMember()
-        && (isOwner() || resource.data.ownerUid == request.auth.uid)
+        && resource.data.ownerUid == request.auth.uid
         && request.resource.data.ownerUid == resource.data.ownerUid;
-      allow delete: if isMember()
-        && (isOwner() || resource.data.ownerUid == request.auth.uid);
+      allow delete: if isMember() && resource.data.ownerUid == request.auth.uid;
     }
 
     match /quotes/{quoteId} {
       allow read: if isMember();
       allow create: if isMember() && request.resource.data.contributorUid == request.auth.uid;
-      // The contributor shown on the page can never be rewritten.
+      // Likewise a quote belongs to whoever contributed it, and the
+      // contributor can never be rewritten.
       allow update: if isMember()
-        && (isOwner() || resource.data.contributorUid == request.auth.uid)
+        && resource.data.contributorUid == request.auth.uid
         && request.resource.data.contributorUid == resource.data.contributorUid;
-      allow delete: if isMember()
-        && (isOwner() || resource.data.contributorUid == request.auth.uid);
+      allow delete: if isMember() && resource.data.contributorUid == request.auth.uid;
     }
 
     // Quotes saved before playlists existed; kept so they can be migrated.

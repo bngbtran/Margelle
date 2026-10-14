@@ -152,6 +152,13 @@ export function Library({ viewer, local, onSignOut }: LibraryProps) {
   const deletingPlaylist = deletingPlaylistId
     ? playlistById.get(deletingPlaylistId)
     : undefined
+  // A playlist cannot be deleted while it still holds other people's quotes,
+  // because only they may remove those.
+  const othersInDeleting = deletingPlaylist
+    ? (quotesByPlaylist.get(deletingPlaylist.id) ?? []).filter(
+        (quote) => quote.contributorUid !== viewer.uid,
+      ).length
+    : 0
 
   // Writes are not awaited: Firestore applies them to the local cache right
   // away and only settles the promise once the server confirms.
@@ -214,7 +221,7 @@ export function Library({ viewer, local, onSignOut }: LibraryProps) {
   }
 
   function confirmDeletePlaylist() {
-    if (!deletingPlaylist) return
+    if (!deletingPlaylist || othersInDeleting > 0) return
     run(
       store.removePlaylist(
         deletingPlaylist.id,
@@ -227,8 +234,7 @@ export function Library({ viewer, local, onSignOut }: LibraryProps) {
   }
 
   const actions: PageActions = {
-    canEdit: (quote) =>
-      viewer.role === 'owner' || quote.contributorUid === viewer.uid,
+    canEdit: (quote) => quote.contributorUid === viewer.uid,
     onCopy: (quote) => {
       navigator.clipboard.writeText(toClipboardText(quote)).then(
         () => toast.success('Đã sao chép'),
@@ -249,9 +255,7 @@ export function Library({ viewer, local, onSignOut }: LibraryProps) {
           quotes={quotesByPlaylist.get(openPlaylist.id) ?? []}
           targetQuoteId={targetQuoteId}
           onTargetReached={clearTarget}
-          canEditPlaylist={
-            viewer.role === 'owner' || openPlaylist.ownerUid === viewer.uid
-          }
+          canEditPlaylist={openPlaylist.ownerUid === viewer.uid}
           actions={actions}
           onClose={closeBook}
           onEditPlaylist={() => setPlaylistForm(openPlaylist.id)}
@@ -475,15 +479,20 @@ export function Library({ viewer, local, onSignOut }: LibraryProps) {
               Xoá playlist “{deletingPlaylist?.title}”?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Cuốn sách sẽ bị xoá vĩnh viễn. Trích dẫn chỉ nằm trong cuốn này
-              cũng bị xoá theo; trích dẫn còn nằm ở cuốn khác thì được giữ lại.
+              {othersInDeleting > 0
+                ? `Chưa xoá được: cuốn này còn ${othersInDeleting} trích dẫn do người khác đóng góp, và chỉ họ mới gỡ được phần của mình. Khi cuốn sách chỉ còn trích dẫn của bạn thì bạn xoá được.`
+                : 'Cuốn sách sẽ bị xoá vĩnh viễn. Trích dẫn chỉ nằm trong cuốn này cũng bị xoá theo; trích dẫn còn nằm ở cuốn khác thì được giữ lại.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Huỷ</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDeletePlaylist}>
-              Xoá
-            </AlertDialogAction>
+            <AlertDialogCancel>
+              {othersInDeleting > 0 ? 'Đóng' : 'Huỷ'}
+            </AlertDialogCancel>
+            {othersInDeleting === 0 && (
+              <AlertDialogAction onClick={confirmDeletePlaylist}>
+                Xoá
+              </AlertDialogAction>
+            )}
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
