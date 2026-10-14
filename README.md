@@ -29,8 +29,8 @@ Khi chưa có cấu hình Firebase, app chạy ở **chế độ cục bộ**: d
 
 ## Ai được dùng kệ sách
 
-- **Chủ kệ sách** là tài khoản đầu tiên đăng nhập sau khi luật bảo mật được triển khai. Hãy tự đăng nhập ngay sau bước 6.
-- **Người đóng góp** là những tài khoản Google được chủ kệ sách mời bằng email (menu tài khoản → Người đóng góp). Họ xem được mọi cuốn sách, tạo playlist và thêm trích dẫn.
+- **Chủ kệ sách** cố định là tài khoản Google `tranbnb.2004@gmail.com` (`OWNER_EMAIL` trong [src/lib/access.ts](src/lib/access.ts) và `isOwner()` trong [firestore.rules](firestore.rules); muốn đổi chủ thì sửa cả hai chỗ). Chỉ chủ kệ sách mới mời được người khác, và xem hoặc xoá người dùng trong menu tài khoản → Quản lý người dùng. Xoá một người chỉ lấy lại quyền vào kệ sách; tài khoản Google của họ và những gì họ đã đóng góp vẫn còn.
+- **Người đóng góp** là những tài khoản Google được chủ kệ sách mời bằng email (menu tài khoản → Mời người dùng). Họ xem được mọi cuốn sách, tạo playlist và thêm trích dẫn.
 - Tài khoản chưa được mời sẽ không đọc được gì.
 - Playlist và trích dẫn của ai thì chỉ người đó sửa hoặc xoá được, kể cả chủ kệ sách cũng không đụng được vào phần của người khác. Một playlist chỉ xoá được khi không còn trích dẫn của người khác bên trong.
 
@@ -40,8 +40,8 @@ Toàn bộ quy tắc này nằm trong [firestore.rules](firestore.rules).
 
 | Collection | Nội dung |
 |---|---|
-| `config/library` | Tài khoản chủ kệ sách |
 | `members/{email}` | Những email được mời |
+| `users/{uid}` | Tuỳ chọn riêng của từng người, như thứ tự sách trên kệ |
 | `playlists/{id}` | Một cuốn sách: tên, lời đề, màu bìa, người tạo |
 | `quotes/{id}` | Một trích dẫn: nội dung, sách gốc, tác giả, các playlist chứa nó, người đóng góp |
 

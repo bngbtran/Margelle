@@ -6,11 +6,12 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // The library belongs to the first account that signed in.
+    // The library's owner, fixed to one Google account. Keep this in sync
+    // with OWNER_EMAIL in src/lib/access.ts.
     function isOwner() {
       return signedIn()
-        && exists(/databases/$(database)/documents/config/library)
-        && get(/databases/$(database)/documents/config/library).data.ownerUid == request.auth.uid;
+        && request.auth.token.email == 'tranbnb.2004@gmail.com'
+        && request.auth.token.email_verified == true;
     }
 
     // Everyone else must be invited by e-mail.
@@ -24,12 +25,7 @@ service cloud.firestore {
       return isOwner() || isInvited();
     }
 
-    match /config/library {
-      allow read: if signedIn();
-      // `create` only applies while the document does not exist yet.
-      allow create: if signedIn() && request.resource.data.ownerUid == request.auth.uid;
-    }
-
+    // Only the owner can see the invitation list and invite or remove people.
     match /members/{email} {
       allow read: if isOwner() || (signedIn() && request.auth.token.email == email);
       allow write: if isOwner();
@@ -57,9 +53,13 @@ service cloud.firestore {
       allow delete: if isMember() && resource.data.contributorUid == request.auth.uid;
     }
 
-    // Personal preferences, such as how each person arranged the shelf.
+    // Each person's profile and preferences, such as how they arranged the
+    // shelf. Each person writes their own; the owner may also read everyone's (to
+    // manage users) and delete them when taking someone's access away.
     match /users/{uid} {
-      allow read, write: if isMember() && request.auth.uid == uid;
+      allow read: if isMember() && (request.auth.uid == uid || isOwner());
+      allow create, update: if isMember() && request.auth.uid == uid;
+      allow delete: if isMember() && (request.auth.uid == uid || isOwner());
     }
 
     // Quotes saved before playlists existed; kept so they can be migrated.

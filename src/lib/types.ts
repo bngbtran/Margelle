@@ -49,3 +49,12 @@ export interface Member {
   email: string
   addedAt: number
 }
+
+// What the owner sees about each person in "Quản lý người dùng".
+export interface Profile {
+  uid: string
+  name: string
+  email: string | null
+  photoURL: string | null
+  lastSeenAt: number
+}

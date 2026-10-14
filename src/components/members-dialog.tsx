@@ -46,7 +46,7 @@ export function MembersDialog({ onClose }: { onClose: () => void }) {
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="font-serif text-lg">Người đóng góp</DialogTitle>
+          <DialogTitle className="font-serif text-lg">Mời người dùng</DialogTitle>
           <DialogDescription>
             Những tài khoản Google dưới đây được xem kệ sách và thêm trích dẫn.
             Mỗi người chỉ sửa, xoá được phần mình thêm.

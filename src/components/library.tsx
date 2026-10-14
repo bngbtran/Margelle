@@ -7,10 +7,11 @@ import {
   Plus,
   Search,
   Sun,
+  UserCog,
   UserRound,
   Users,
 } from 'lucide-react'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { toast } from 'sonner'
 import { AboutDialog } from '@/components/about-dialog'
@@ -21,6 +22,7 @@ import { MembersDialog } from '@/components/members-dialog'
 import { PlaylistForm } from '@/components/playlist-form'
 import { QuoteForm } from '@/components/quote-form'
 import { Shelf } from '@/components/shelf'
+import { UsersDialog } from '@/components/users-dialog'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -42,6 +44,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { useLibrary } from '@/hooks/use-library'
+import { recordProfile } from '@/lib/access'
 import {
   setThemePreference,
   useThemePreference,
@@ -84,6 +87,15 @@ const THEME_LABEL: Record<ThemePreference, string> = {
   dark: 'Giao diện: tối',
 }
 
+function countBy<T>(items: T[], keyOf: (item: T) => string) {
+  const counts = new Map<string, number>()
+  for (const item of items) {
+    const key = keyOf(item)
+    counts.set(key, (counts.get(key) ?? 0) + 1)
+  }
+  return counts
+}
+
 // Animates between the shelf and the reader where the browser supports it.
 function withTransition(update: () => void) {
   if (document.startViewTransition) {
@@ -112,6 +124,12 @@ export function Library({ viewer, local, onSignOut }: LibraryProps) {
   )
   const [membersOpen, setMembersOpen] = useState(false)
   const [aboutOpen, setAboutOpen] = useState(false)
+  const [usersOpen, setUsersOpen] = useState(false)
+
+  // Lets the owner see who uses the shelf and when they last came by.
+  useEffect(() => {
+    if (!local) recordProfile(viewer).catch(() => {})
+  }, [viewer, local])
 
   const quoteById = useMemo(() => new Map(quotes.map((q) => [q.id, q])), [quotes])
   const playlistById = useMemo(
@@ -389,7 +407,12 @@ export function Library({ viewer, local, onSignOut }: LibraryProps) {
                     <DropdownMenuSeparator />
                     {viewer.role === 'owner' && !local && (
                       <DropdownMenuItem onSelect={() => setMembersOpen(true)}>
-                        <Users /> Người đóng góp
+                        <Users /> Mời người dùng
+                      </DropdownMenuItem>
+                    )}
+                    {viewer.role === 'owner' && !local && (
+                      <DropdownMenuItem onSelect={() => setUsersOpen(true)}>
+                        <UserCog /> Quản lý người dùng
                       </DropdownMenuItem>
                     )}
                     <DropdownMenuItem
@@ -494,11 +517,19 @@ export function Library({ viewer, local, onSignOut }: LibraryProps) {
                         ))}
                       </datalist>
                     </div>
-                    {canDragShelf && (
-                      <p className="ml-auto text-sm text-muted-foreground max-sm:hidden">
-                        Kéo sách để đổi chỗ
-                      </p>
-                    )}
+                    {/* Always say how to rearrange, and why it is off when it is. */}
+                    <p className="text-sm text-muted-foreground max-sm:w-full sm:ml-auto">
+                      {canDragShelf ? (
+                        <>
+                          <span className="max-sm:hidden">Kéo sách để đổi chỗ</span>
+                          <span className="sm:hidden">
+                            Giữ rồi kéo sách để đổi chỗ
+                          </span>
+                        </>
+                      ) : (
+                        'Chọn “Tự sắp xếp” và bỏ lọc để kéo sách đổi chỗ'
+                      )}
+                    </p>
                   </div>
                 )}
                 <Shelf
@@ -555,6 +586,14 @@ export function Library({ viewer, local, onSignOut }: LibraryProps) {
       {membersOpen && <MembersDialog onClose={() => setMembersOpen(false)} />}
 
       {aboutOpen && <AboutDialog onClose={() => setAboutOpen(false)} />}
+
+      {usersOpen && (
+        <UsersDialog
+          playlistCounts={countBy(playlists, (p) => p.ownerUid)}
+          quoteCounts={countBy(quotes, (q) => q.contributorUid)}
+          onClose={() => setUsersOpen(false)}
+        />
+      )}
 
       <AlertDialog
         open={deletingQuote !== undefined}
