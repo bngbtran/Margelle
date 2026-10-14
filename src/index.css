@@ -157,6 +157,10 @@
   html {
     @apply font-sans;
     }
+  /* Inputs with suggestions keep them, without Chrome's arrow at the end. */
+  input[list]::-webkit-calendar-picker-indicator {
+    display: none !important;
+    }
   ::selection {
     background: color-mix(in oklch, var(--brand), transparent 70%);
     }

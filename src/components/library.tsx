@@ -1,4 +1,5 @@
 import {
+  ChevronDown,
   Download,
   Info,
   LogOut,
@@ -54,12 +55,20 @@ import { coverStyle } from '@/lib/cover'
 import { downloadJson, sourceOf, toClipboardText } from '@/lib/quote'
 import { buildIndex, fold } from '@/lib/search'
 import type { PlaylistInput, Quote, QuoteInput, Viewer } from '@/lib/types'
+import { cn } from '@/lib/utils'
 
 interface LibraryProps {
   viewer: Viewer
   // Local mode: no Firebase, everything stays in this browser.
   local: boolean
   onSignOut: () => void
+}
+
+const SHELF_MODES = ['mine', 'explore'] as const
+type ShelfMode = (typeof SHELF_MODES)[number]
+const SHELF_MODE_LABEL: Record<ShelfMode, string> = {
+  mine: 'Kệ của tôi',
+  explore: 'Khám phá',
 }
 
 const SHELF_SORTS = ['manual', 'title-asc', 'title-desc'] as const
@@ -162,6 +171,24 @@ export function Library({ viewer, local, onSignOut }: LibraryProps) {
 
   const [shelfSort, setShelfSort] = useState<ShelfSort>(readShelfSort)
   const [compilerFilter, setCompilerFilter] = useState('')
+  // "mine" shows only the viewer's own books; "explore" shows everyone's.
+  const [mode, setMode] = useState<ShelfMode>('mine')
+  const exploring = mode === 'explore'
+
+  function changeMode(next: ShelfMode) {
+    setMode(next)
+    // The compiler filter only exists while exploring.
+    if (next === 'mine') setCompilerFilter('')
+  }
+
+  const ownPlaylists = useMemo(
+    () => playlists.filter((p) => p.ownerUid === viewer.uid),
+    [playlists, viewer.uid],
+  )
+  const ownIds = useMemo(
+    () => new Set(ownPlaylists.map((p) => p.id)),
+    [ownPlaylists],
+  )
 
   function changeShelfSort(next: ShelfSort) {
     setShelfSort(next)
@@ -188,19 +215,23 @@ export function Library({ viewer, local, onSignOut }: LibraryProps) {
   }, [playlists, shelfOrder])
 
   const shelfPlaylists = useMemo(() => {
-    const wanted = fold(compilerFilter.trim())
+    const wanted = exploring ? fold(compilerFilter.trim()) : ''
+    const inMode = exploring
+      ? arranged
+      : arranged.filter((p) => p.ownerUid === viewer.uid)
     const shown = wanted
-      ? arranged.filter((p) => fold(p.ownerName).includes(wanted))
-      : arranged
+      ? inMode.filter((p) => fold(p.ownerName).includes(wanted))
+      : inMode
     if (shelfSort === 'manual') return shown
     const direction = shelfSort === 'title-asc' ? 1 : -1
     return [...shown].sort(
       (a, b) => direction * a.title.localeCompare(b.title, 'vi'),
     )
-  }, [arranged, compilerFilter, shelfSort])
+  }, [arranged, compilerFilter, shelfSort, exploring, viewer.uid])
 
   // Dragging only makes sense when the whole shelf is shown in its own order.
-  const canDragShelf = shelfSort === 'manual' && compilerFilter.trim() === ''
+  const canDragShelf =
+    shelfSort === 'manual' && (!exploring || compilerFilter.trim() === '')
 
   const query = search.trim()
   const results = useMemo(
@@ -212,10 +243,12 @@ export function Library({ viewer, local, onSignOut }: LibraryProps) {
             .filter(
               (q): q is Quote =>
                 q !== undefined &&
-                q.playlistIds.some((id) => playlistById.has(id)),
+                q.playlistIds.some((id) =>
+                  exploring ? playlistById.has(id) : ownIds.has(id),
+                ),
             )
         : [],
-    [query, index, quoteById, playlistById],
+    [query, index, quoteById, playlistById, exploring, ownIds],
   )
 
   const openPlaylist = openId ? playlistById.get(openId) : undefined
@@ -273,6 +306,10 @@ export function Library({ viewer, local, onSignOut }: LibraryProps) {
 
   function handleQuoteSubmit(input: QuoteInput) {
     if (editingQuote) {
+      const elsewhere = editingQuote.playlistIds.filter(
+        (id) => !ownIds.has(id) && playlistById.has(id),
+      )
+      input = { ...input, playlistIds: [...input.playlistIds, ...elsewhere] }
       run(store.updateQuote(editingQuote.id, input), 'Không lưu được thay đổi')
       if (openId && input.playlistIds.includes(openId)) {
         setTargetQuoteId(editingQuote.id)
@@ -318,6 +355,8 @@ export function Library({ viewer, local, onSignOut }: LibraryProps) {
     },
     onEdit: (quote) => setQuoteForm(quote.id),
     onDelete: (quote) => setDeletingQuoteId(quote.id),
+    // Quotes can only be added to one's own books.
+    canAdd: openPlaylist?.ownerUid === viewer.uid,
     onAdd: () => setQuoteForm('new'),
   }
 
@@ -486,20 +525,48 @@ export function Library({ viewer, local, onSignOut }: LibraryProps) {
               </section>
             ) : (
               <>
-                {playlists.length > 1 && (
-                  <div className="mb-4 flex flex-wrap items-center gap-2">
-                    <select
-                      value={shelfSort}
-                      onChange={(e) => changeShelfSort(e.target.value as ShelfSort)}
-                      aria-label="Sắp xếp kệ sách"
-                      className="h-8 cursor-pointer rounded-full border border-input bg-card px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-                    >
-                      {SHELF_SORTS.map((option) => (
-                        <option key={option} value={option}>
-                          {SHELF_SORT_LABEL[option]}
-                        </option>
-                      ))}
-                    </select>
+                <div className="mb-4 flex flex-wrap items-center gap-2">
+                  <div
+                    role="tablist"
+                    aria-label="Kệ sách hiển thị"
+                    className="flex rounded-full border bg-card p-0.5"
+                  >
+                    {SHELF_MODES.map((option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        role="tab"
+                        aria-selected={mode === option}
+                        onClick={() => changeMode(option)}
+                        className={cn(
+                          'rounded-full px-3.5 py-1 text-sm font-medium transition-colors',
+                          mode === option
+                            ? 'bg-primary text-primary-foreground'
+                            : 'text-muted-foreground hover:text-foreground',
+                        )}
+                      >
+                        {SHELF_MODE_LABEL[option]}
+                      </button>
+                    ))}
+                  </div>
+                  {shelfPlaylists.length + (compilerFilter.trim() ? 1 : 0) > 1 && (
+                    <div className="relative">
+                      <select
+                        value={shelfSort}
+                        onChange={(e) => changeShelfSort(e.target.value as ShelfSort)}
+                        aria-label="Sắp xếp kệ sách"
+                        className="h-8 cursor-pointer appearance-none rounded-full border border-input bg-card pr-8 pl-3.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                      >
+                        {SHELF_SORTS.map((option) => (
+                          <option key={option} value={option}>
+                            {SHELF_SORT_LABEL[option]}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-muted-foreground" />
+                    </div>
+                  )}
+                  {exploring && (
                     <div className="relative">
                       <UserRound className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
                       <Input
@@ -517,7 +584,9 @@ export function Library({ viewer, local, onSignOut }: LibraryProps) {
                         ))}
                       </datalist>
                     </div>
-                    {/* Always say how to rearrange, and why it is off when it is. */}
+                  )}
+                  {/* Always say how to rearrange, and why it is off when it is. */}
+                  {shelfPlaylists.length > 1 && (
                     <p className="text-sm text-muted-foreground max-sm:w-full sm:ml-auto">
                       {canDragShelf ? (
                         <>
@@ -527,34 +596,34 @@ export function Library({ viewer, local, onSignOut }: LibraryProps) {
                           </span>
                         </>
                       ) : (
-                        'Chọn “Tự sắp xếp” và bỏ lọc để kéo sách đổi chỗ'
+                        exploring
+                          ? 'Chọn “Tự sắp xếp” và bỏ lọc để kéo sách đổi chỗ'
+                          : 'Chọn “Tự sắp xếp” để kéo sách đổi chỗ'
                       )}
                     </p>
-                  </div>
-                )}
+                  )}
+                </div>
                 <Shelf
                   playlists={shelfPlaylists}
                   quoteCounts={quoteCounts}
                   openingId={openingId}
                   sortable={canDragShelf}
+                  showOwner={exploring}
+                  canCreate={!exploring}
                   onReorder={(ids) =>
                     run(reorderShelf(ids), 'Không lưu được vị trí sách')
                   }
                   onOpen={(id) => openBook(id)}
                   onCreate={() => setPlaylistForm('new')}
                 />
-                {playlists.length === 0 ? (
+                {shelfPlaylists.length === 0 && (
                   <p className="mt-6 text-center text-muted-foreground">
-                    Kệ sách còn trống. Hãy tạo playlist đầu tiên để bắt đầu lưu
-                    trích dẫn.
+                    {!exploring
+                      ? 'Kệ của bạn còn trống. Hãy tạo playlist đầu tiên để bắt đầu lưu trích dẫn.'
+                      : compilerFilter.trim()
+                        ? `Không có playlist nào do “${compilerFilter.trim()}” tổng hợp.`
+                        : 'Chưa có ai tạo playlist nào.'}
                   </p>
-                ) : (
-                  shelfPlaylists.length === 0 && (
-                    <p className="mt-6 text-center text-muted-foreground">
-                      Không có playlist nào do “{compilerFilter.trim()}” tổng
-                      hợp.
-                    </p>
-                  )
                 )}
               </>
             )}
@@ -575,8 +644,14 @@ export function Library({ viewer, local, onSignOut }: LibraryProps) {
         <QuoteForm
           key={quoteForm}
           quote={editingQuote ?? null}
-          playlists={playlists}
-          defaultPlaylistId={openId ?? (playlists.length === 1 ? playlists[0].id : null)}
+          playlists={ownPlaylists}
+          defaultPlaylistId={
+            openId && ownIds.has(openId)
+              ? openId
+              : ownPlaylists.length === 1
+                ? ownPlaylists[0].id
+                : null
+          }
           books={authorByBook}
           onSubmit={handleQuoteSubmit}
           onClose={() => setQuoteForm(null)}

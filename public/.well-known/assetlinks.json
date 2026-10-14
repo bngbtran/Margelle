@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.bngbtran.margelle",
+      "sha256_cert_fingerprints": [
+        "E4:01:3F:DA:08:70:B3:12:E8:49:23:24:DD:52:27:B6:A6:BD:AE:6F:8E:D6:D8:43:54:5D:09:4F:3C:99:78:75"
+      ]
+    }
+  }
+]

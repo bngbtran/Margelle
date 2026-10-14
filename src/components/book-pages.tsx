@@ -19,6 +19,8 @@ export interface PageActions {
   onCopy: (quote: Quote) => void
   onEdit: (quote: Quote) => void
   onDelete: (quote: Quote) => void
+  // Whether quotes may be added to this book (only to one's own).
+  canAdd: boolean
   onAdd: () => void
 }
 
@@ -105,15 +107,17 @@ export function BookPage({
           <p className="font-serif text-[1.15em] text-(--page-muted) italic">
             Cuốn sách này chưa có trang nào.
           </p>
-          <Button
-            className="mt-[1.4em] rounded-full px-4"
-            onClick={(event) => {
-              event.stopPropagation()
-              actions.onAdd()
-            }}
-          >
-            <Plus /> Thêm trích dẫn đầu tiên
-          </Button>
+          {actions.canAdd && (
+            <Button
+              className="mt-[1.4em] rounded-full px-4"
+              onClick={(event) => {
+                event.stopPropagation()
+                actions.onAdd()
+              }}
+            >
+              <Plus /> Thêm trích dẫn đầu tiên
+            </Button>
+          )}
         </div>
       )
     case 'quote':

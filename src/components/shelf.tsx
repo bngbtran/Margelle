@@ -27,6 +27,10 @@ interface ShelfProps {
   openingId: string | null
   // Whether books can be dragged to a new place.
   sortable: boolean
+  // Name whose shelf each book is from (while exploring everyone's books).
+  showOwner: boolean
+  // Whether to offer the "Tạo playlist" slot.
+  canCreate: boolean
   onReorder: (ids: string[]) => void
   onOpen: (playlistId: string) => void
   onCreate: () => void
@@ -42,6 +46,8 @@ export function Shelf({
   quoteCounts,
   openingId,
   sortable,
+  showOwner,
+  canCreate,
   onReorder,
   onOpen,
   onCreate,
@@ -78,15 +84,18 @@ export function Shelf({
               count={quoteCounts.get(playlist.id) ?? 0}
               opening={openingId === playlist.id}
               sortable={sortable}
+              showOwner={showOwner}
               onOpen={() => onOpen(playlist.id)}
             />
           ))}
-          <button type="button" className="shelf-slot" onClick={onCreate}>
-            <span className="book-new">
-              <Plus className="size-5" />
-              Tạo playlist
-            </span>
-          </button>
+          {canCreate && (
+            <button type="button" className="shelf-slot" onClick={onCreate}>
+              <span className="book-new">
+                <Plus className="size-5" />
+                Tạo playlist
+              </span>
+            </button>
+          )}
         </div>
       </SortableContext>
     </DndContext>
@@ -98,10 +107,18 @@ interface ShelfBookProps {
   count: number
   opening: boolean
   sortable: boolean
+  showOwner: boolean
   onOpen: () => void
 }
 
-function ShelfBook({ playlist, count, opening, sortable, onOpen }: ShelfBookProps) {
+function ShelfBook({
+  playlist,
+  count,
+  opening,
+  sortable,
+  showOwner,
+  onOpen,
+}: ShelfBookProps) {
   const {
     attributes,
     listeners,
@@ -140,7 +157,10 @@ function ShelfBook({ playlist, count, opening, sortable, onOpen }: ShelfBookProp
       <span className="shelf-caption">
         <span className="shelf-label">
           <b>{playlist.title}</b>
-          <span>{count} trích dẫn</span>
+          <span>
+            {showOwner && `${playlist.ownerName} · `}
+            {count} trích dẫn
+          </span>
         </span>
       </span>
     </button>

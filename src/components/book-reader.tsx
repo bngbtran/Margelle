@@ -171,9 +171,11 @@ export function BookReader({
         <h1 className="mx-auto truncate px-2 font-serif text-lg font-medium">
           {playlist.title}
         </h1>
-        <Button className="rounded-full px-3.5" onClick={actions.onAdd}>
-          <Plus /> <span className="max-sm:hidden">Thêm trích dẫn</span>
-        </Button>
+        {actions.canAdd && (
+          <Button className="rounded-full px-3.5" onClick={actions.onAdd}>
+            <Plus /> <span className="max-sm:hidden">Thêm trích dẫn</span>
+          </Button>
+        )}
         {canEditPlaylist && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
