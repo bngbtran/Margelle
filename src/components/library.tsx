@@ -49,7 +49,7 @@ import {
 } from '@/hooks/use-theme'
 import { coverStyle } from '@/lib/cover'
 import { downloadJson, sourceOf, toClipboardText } from '@/lib/quote'
-import { buildIndex } from '@/lib/search'
+import { buildIndex, fold } from '@/lib/search'
 import type { PlaylistInput, Quote, QuoteInput, Viewer } from '@/lib/types'
 
 interface LibraryProps {
@@ -57,6 +57,20 @@ interface LibraryProps {
   // Local mode: no Firebase, everything stays in this browser.
   local: boolean
   onSignOut: () => void
+}
+
+const SHELF_SORTS = ['manual', 'title-asc', 'title-desc'] as const
+type ShelfSort = (typeof SHELF_SORTS)[number]
+const SHELF_SORT_LABEL: Record<ShelfSort, string> = {
+  manual: 'Tự sắp xếp',
+  'title-asc': 'Tên sách A → Z',
+  'title-desc': 'Tên sách Z → A',
+}
+const SHELF_SORT_KEY = 'margelle.shelfSort'
+
+function readShelfSort(): ShelfSort {
+  const saved = localStorage.getItem(SHELF_SORT_KEY)
+  return SHELF_SORTS.find((option) => option === saved) ?? 'manual'
 }
 
 const NEXT_THEME: Record<ThemePreference, ThemePreference> = {
@@ -80,7 +94,8 @@ function withTransition(update: () => void) {
 }
 
 export function Library({ viewer, local, onSignOut }: LibraryProps) {
-  const { playlists, quotes, loading, error, store } = useLibrary(viewer, local)
+  const { playlists, quotes, shelfOrder, reorderShelf, loading, error, store } =
+    useLibrary(viewer, local)
   const themePreference = useThemePreference()
 
   const [search, setSearch] = useState('')
@@ -126,6 +141,48 @@ export function Library({ viewer, local, onSignOut }: LibraryProps) {
     return authors
   }, [quotes])
   const index = useMemo(() => buildIndex(quotes), [quotes])
+
+  const [shelfSort, setShelfSort] = useState<ShelfSort>(readShelfSort)
+  const [compilerFilter, setCompilerFilter] = useState('')
+
+  function changeShelfSort(next: ShelfSort) {
+    setShelfSort(next)
+    localStorage.setItem(SHELF_SORT_KEY, next)
+  }
+
+  const compilers = useMemo(
+    () =>
+      [...new Set(playlists.map((p) => p.ownerName).filter(Boolean))].sort(
+        (a, b) => a.localeCompare(b, 'vi'),
+      ),
+    [playlists],
+  )
+
+  // The viewer's own arrangement; playlists it does not mention yet (new
+  // ones) go to the end, oldest first.
+  const arranged = useMemo(() => {
+    const rank = new Map(shelfOrder.map((id, position) => [id, position]))
+    return [...playlists].sort(
+      (a, b) =>
+        (rank.get(a.id) ?? Infinity) - (rank.get(b.id) ?? Infinity) ||
+        a.createdAt - b.createdAt,
+    )
+  }, [playlists, shelfOrder])
+
+  const shelfPlaylists = useMemo(() => {
+    const wanted = fold(compilerFilter.trim())
+    const shown = wanted
+      ? arranged.filter((p) => fold(p.ownerName).includes(wanted))
+      : arranged
+    if (shelfSort === 'manual') return shown
+    const direction = shelfSort === 'title-asc' ? 1 : -1
+    return [...shown].sort(
+      (a, b) => direction * a.title.localeCompare(b.title, 'vi'),
+    )
+  }, [arranged, compilerFilter, shelfSort])
+
+  // Dragging only makes sense when the whole shelf is shown in its own order.
+  const canDragShelf = shelfSort === 'manual' && compilerFilter.trim() === ''
 
   const query = search.trim()
   const results = useMemo(
@@ -406,18 +463,67 @@ export function Library({ viewer, local, onSignOut }: LibraryProps) {
               </section>
             ) : (
               <>
+                {playlists.length > 1 && (
+                  <div className="mb-4 flex flex-wrap items-center gap-2">
+                    <select
+                      value={shelfSort}
+                      onChange={(e) => changeShelfSort(e.target.value as ShelfSort)}
+                      aria-label="Sắp xếp kệ sách"
+                      className="h-8 cursor-pointer rounded-full border border-input bg-card px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                    >
+                      {SHELF_SORTS.map((option) => (
+                        <option key={option} value={option}>
+                          {SHELF_SORT_LABEL[option]}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="relative">
+                      <UserRound className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        value={compilerFilter}
+                        onChange={(e) => setCompilerFilter(e.target.value)}
+                        placeholder="Lọc theo người tổng hợp"
+                        aria-label="Lọc theo người tổng hợp"
+                        list="known-compilers"
+                        autoComplete="off"
+                        className="h-8 w-60 rounded-full bg-card pl-9"
+                      />
+                      <datalist id="known-compilers">
+                        {compilers.map((name) => (
+                          <option key={name} value={name} />
+                        ))}
+                      </datalist>
+                    </div>
+                    {canDragShelf && (
+                      <p className="ml-auto text-sm text-muted-foreground max-sm:hidden">
+                        Kéo sách để đổi chỗ
+                      </p>
+                    )}
+                  </div>
+                )}
                 <Shelf
-                  playlists={playlists}
+                  playlists={shelfPlaylists}
                   quoteCounts={quoteCounts}
                   openingId={openingId}
+                  sortable={canDragShelf}
+                  onReorder={(ids) =>
+                    run(reorderShelf(ids), 'Không lưu được vị trí sách')
+                  }
                   onOpen={(id) => openBook(id)}
                   onCreate={() => setPlaylistForm('new')}
                 />
-                {playlists.length === 0 && (
+                {playlists.length === 0 ? (
                   <p className="mt-6 text-center text-muted-foreground">
                     Kệ sách còn trống. Hãy tạo playlist đầu tiên để bắt đầu lưu
                     trích dẫn.
                   </p>
+                ) : (
+                  shelfPlaylists.length === 0 && (
+                    <p className="mt-6 text-center text-muted-foreground">
+                      Không có playlist nào do “{compilerFilter.trim()}” tổng
+                      hợp.
+                    </p>
+                  )
                 )}
               </>
             )}

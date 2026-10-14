@@ -324,6 +324,13 @@
     text-align: center;
     outline: none;
 }
+/* A book being dragged to a new place floats above its neighbours. */
+.shelf-slot[data-dragging] { z-index: 5; cursor: grabbing; }
+.shelf-slot[data-dragging] .book3d {
+    transform: rotateY(-7deg) translateY(-14px) scale(1.06);
+}
+.shelf-slot[data-dragging] .book3d::after { box-shadow: -18px 14px 26px rgb(0 0 0 / 0.55); }
+.shelf-slot[data-dragging] .shelf-caption { opacity: 0; }
 /* The caption is lettered straight onto the front edge of the board. */
 .shelf-caption {
     height: var(--board-edge);

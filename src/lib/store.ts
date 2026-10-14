@@ -39,6 +39,9 @@ export interface LibraryStore {
   addQuote(input: QuoteInput): Created
   updateQuote(id: string, patch: Partial<QuoteInput>): Promise<void>
   removeQuote(id: string): Promise<void>
+  // The viewer's own arrangement of the shelf: playlist ids, left to right.
+  subscribeShelfOrder(onData: (ids: string[]) => void): () => void
+  saveShelfOrder(ids: string[]): Promise<void>
 }
 
 // Firestore allows 500 writes per batch.
@@ -90,6 +93,7 @@ export function firestoreStore(viewer: Viewer): LibraryStore {
   const firestore = db
   const playlists = collection(firestore, 'playlists')
   const quotes = collection(firestore, 'quotes')
+  const preferences = doc(firestore, 'users', viewer.uid)
 
   return {
     subscribePlaylists(onData, onError) {
@@ -158,6 +162,20 @@ export function firestoreStore(viewer: Viewer): LibraryStore {
     async removeQuote(id) {
       await deleteDoc(doc(quotes, id))
     },
+    subscribeShelfOrder(onData) {
+      return onSnapshot(
+        preferences,
+        (snapshot) => {
+          const ids = snapshot.data()?.shelfOrder
+          onData(Array.isArray(ids) ? (ids as string[]) : [])
+        },
+        // Without a saved arrangement the shelf falls back to creation order.
+        () => onData([]),
+      )
+    },
+    async saveShelfOrder(ids) {
+      await setDoc(preferences, { shelfOrder: ids }, { merge: true })
+    },
   }
 }
 
@@ -203,6 +221,7 @@ export async function migrateLegacyQuotes(viewer: Viewer): Promise<void> {
   localStorage.setItem(MIGRATED_KEY + viewer.uid, '1')
 }
 
+const LOCAL_SHELF_ORDER = 'margelle.local.shelfOrder'
 const LOCAL_PLAYLISTS = 'margelle.local.playlists'
 const LOCAL_QUOTES = 'margelle.local.quotes'
 
@@ -309,6 +328,17 @@ export function localStore(viewer: Viewer): LibraryStore {
     },
     async removeQuote(id) {
       localQuotes.write(localQuotes.read().filter((q) => q.id !== id))
+    },
+    subscribeShelfOrder(onData) {
+      try {
+        onData(JSON.parse(localStorage.getItem(LOCAL_SHELF_ORDER) ?? '[]'))
+      } catch {
+        onData([])
+      }
+      return () => {}
+    },
+    async saveShelfOrder(ids) {
+      localStorage.setItem(LOCAL_SHELF_ORDER, JSON.stringify(ids))
     },
   }
 }

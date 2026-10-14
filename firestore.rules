@@ -57,6 +57,11 @@ service cloud.firestore {
       allow delete: if isMember() && resource.data.contributorUid == request.auth.uid;
     }
 
+    // Personal preferences, such as how each person arranged the shelf.
+    match /users/{uid} {
+      allow read, write: if isMember() && request.auth.uid == uid;
+    }
+
     // Quotes saved before playlists existed; kept so they can be migrated.
     match /users/{uid}/quotes/{quoteId} {
       allow read, write: if signedIn() && request.auth.uid == uid;
